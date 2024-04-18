@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
 
-import "@openzeppelin-upgradeable/contracts/token/ERC20/ERC20Upgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
+import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 contract bremBadger is ERC20Upgradeable, Initializable, UUPSUpgradeable {
+    using SafeERC20 for IERC20;
 
     // The start of the program is set retroactively to Feb 18, 2024. 
     // This mean that the unlock must occur 9 months after this, on Nov 18, 2024. 
@@ -30,7 +31,7 @@ contract bremBadger is ERC20Upgradeable, Initializable, UUPSUpgradeable {
         _disableInitializers();
 
         OWNER = _owner;
-        REM_BADGER_TOKEN = _remBadgerToken;
+        REM_BADGER_TOKEN = IERC20(_remBadgerToken);
     }
 
     function initialize() external initializer {

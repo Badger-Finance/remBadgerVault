@@ -4,8 +4,9 @@ pragma solidity ^0.8.20;
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-contract bremBadger is ERC20Upgradeable, Initializable, UUPSUpgradeable {
+contract bremBadger is ERC20Upgradeable, UUPSUpgradeable {
     using SafeERC20 for IERC20;
 
     // The start of the program is set retroactively to Feb 18, 2024. 
@@ -14,6 +15,7 @@ contract bremBadger is ERC20Upgradeable, Initializable, UUPSUpgradeable {
     uint256 public constant UNLOCK_TIMESTAMP = 1731888000;
     uint256 public constant VESTING_WEEKS = 12;
     uint256 public constant ONE_WEEK_IN_SECONDS = 1 weeks;
+    uint256 public constant DEPOSIT_PERIOD_IN_SECONDS = 2 weeks;
 
     IERC20 public immutable REM_BADGER_TOKEN;
     address public immutable OWNER;
@@ -34,14 +36,14 @@ contract bremBadger is ERC20Upgradeable, Initializable, UUPSUpgradeable {
         REM_BADGER_TOKEN = IERC20(_remBadgerToken);
     }
 
-    function initialize() external initializer {
-        ERC20Upgradeable.__ERC20Upgradeable_init("bremBADGER", "bremBADGER");
+    function initialize() external onlyOwner initializer {
+        ERC20Upgradeable.__ERC20_init("bremBADGER", "bremBADGER");
         UUPSUpgradeable.__UUPSUpgradeable_init();
     }
 
     function enableDeposits() external onlyOwner {
         depositStart = block.timestamp;
-        depositEnd = depositStart + 2 weeks;
+        depositEnd = block.timestamp + DEPOSIT_PERIOD_IN_SECONDS;
     }
 
     function disableDeposits() external onlyOwner {
@@ -50,40 +52,49 @@ contract bremBadger is ERC20Upgradeable, Initializable, UUPSUpgradeable {
 
     function deposit(uint256 _amount) external {
         require(block.timestamp >= depositStart && block.timestamp < depositEnd, "No more deposits");
+        require(_amount > 0, "zero amount");
 
-        uint256 _pool = balance();
-        uint256 _before = REM_BADGER_TOKEN.balanceOf(address(this));
+        uint256 balBefore = REM_BADGER_TOKEN.balanceOf(address(this));
         REM_BADGER_TOKEN.safeTransferFrom(msg.sender, address(this), _amount);
-        uint256 _after = REM_BADGER_TOKEN.balanceOf(address(this));
-        _amount = _after.sub(_before); // Additional check for deflationary tokens
-        uint256 shares = 0;
-        if (totalSupply() == 0) {
-            shares = _amount;
+        uint256 balAfter = REM_BADGER_TOKEN.balanceOf(address(this));
+
+        _amount = balAfter - balBefore; // Additional check for deflationary tokens
+
+        uint256 totalShares = totalSupply();
+        uint256 sharesToMint;
+        if (totalShares == 0) {
+            sharesToMint = _amount;
         } else {
-            shares = (_amount.mul(totalSupply())).div(_pool);
+            sharesToMint = _amount * totalShares / balBefore;
         }
-        _mint(msg.sender, shares);
+
+        _mint(msg.sender, sharesToMint);
     }
 
-    function withdraw(uint256 amount) external {
+    function withdrawAll() external {
         require(block.timestamp >= UNLOCK_TIMESTAMP, "Not yet");
 
-        (uint256 vestedAmount, uint256 numWeeks) = _vestedAmount();
+        (uint256 shares, uint256 numWeeks) = _vestedShares();
 
-        require(vestedAmount > 0, "zero amount");
+        require(shares > 0, "zero shares");
+
+        uint256 vestedAmount = shares * getPricePerFullShare();
+
+        _burn(msg.sender, shares);
 
         if (numWeeks > 0) {
             numVestings[msg.sender] += numWeeks;
         }
 
         REM_BADGER_TOKEN.safeTransfer(msg.sender, vestedAmount);
+
         // TODO: emit event
     }
 
-    function _vestedAmount() private view returns (uint256 vestedAmount, uint256 numWeeks) {
+    function _vestedShares() private view returns (uint256, uint256) {
         uint256 shares = balanceOf(msg.sender);
 
-        if (shares == 0) return 0;
+        if (shares == 0) return (0, 0);
 
         uint256 remainingWeeks = VESTING_WEEKS - numVestings[msg.sender];
 
@@ -99,17 +110,15 @@ contract bremBadger is ERC20Upgradeable, Initializable, UUPSUpgradeable {
 
         shares = numWeeks > 0 ? shares * numWeeks : shares;
 
-        _burn(msg.sender, shares);
-
-        return (shares * getPricePerFullShare(), numWeeks);
+        return (shares, numWeeks);
     }
 
     function available() public view returns (uint256) {
         if (block.timestamp < UNLOCK_TIMESTAMP) return 0;
 
-        (uint256 vestedAmount, ) = _vestedAmount();
+        (uint256 shares, ) = _vestedShares();
 
-        return vestedAmount;
+        return shares * getPricePerFullShare();
     }
 
     function getPricePerFullShare() public view returns (uint256) {

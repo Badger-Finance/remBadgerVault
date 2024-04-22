@@ -5,8 +5,9 @@ import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-contract bremBadger is ERC20Upgradeable, UUPSUpgradeable {
+contract bremBadger is ERC20Upgradeable, ReentrancyGuard, UUPSUpgradeable {
     using SafeERC20 for IERC20;
 
     // The start of the program is set retroactively to Feb 18, 2024. 
@@ -23,6 +24,9 @@ contract bremBadger is ERC20Upgradeable, UUPSUpgradeable {
     uint256 public depositStart;
     uint256 public depositEnd;
     mapping(address => uint256) public numVestings;
+
+    event DepositsEnabled(uint256 start, uint256 end);
+    event DepositsDisabled();
 
     modifier onlyOwner() {
         require(msg.sender == OWNER, "Only owner");
@@ -44,13 +48,19 @@ contract bremBadger is ERC20Upgradeable, UUPSUpgradeable {
     function enableDeposits() external onlyOwner {
         depositStart = block.timestamp;
         depositEnd = block.timestamp + DEPOSIT_PERIOD_IN_SECONDS;
+
+        require(depositEnd < UNLOCK_TIMESTAMP);
+
+        emit DepositsEnabled(depositStart, depositEnd);
     }
 
     function disableDeposits() external onlyOwner {
         depositEnd = block.timestamp;
+
+        emit DepositsDisabled();
     }
 
-    function deposit(uint256 _amount) external {
+    function deposit(uint256 _amount) external nonReentrant {
         require(block.timestamp >= depositStart && block.timestamp < depositEnd, "No more deposits");
         require(_amount > 0, "zero amount");
 
@@ -71,7 +81,7 @@ contract bremBadger is ERC20Upgradeable, UUPSUpgradeable {
         _mint(msg.sender, sharesToMint);
     }
 
-    function withdrawAll() external {
+    function withdrawAll() external nonReentrant {
         require(block.timestamp >= UNLOCK_TIMESTAMP, "Not yet");
 
         (uint256 shares, uint256 numWeeks) = _vestedShares();
@@ -98,9 +108,10 @@ contract bremBadger is ERC20Upgradeable, UUPSUpgradeable {
 
         uint256 remainingWeeks = VESTING_WEEKS - numVestings[msg.sender];
 
-        if (remainingWeeks > 0) {
-            shares = shares / remainingWeeks;
-        }
+        if (remainingWeeks == 0) return (0, 0);
+        if (remainingWeeks == 1) return (shares, 1);
+
+        shares = shares / remainingWeeks;
         
         uint256 numWeeks = (block.timestamp - UNLOCK_TIMESTAMP) / ONE_WEEK_IN_SECONDS;
 
@@ -113,7 +124,7 @@ contract bremBadger is ERC20Upgradeable, UUPSUpgradeable {
         return (shares, numWeeks);
     }
 
-    function available() public view returns (uint256) {
+    function vestedAmount() public view returns (uint256) {
         if (block.timestamp < UNLOCK_TIMESTAMP) return 0;
 
         (uint256 shares, ) = _vestedShares();

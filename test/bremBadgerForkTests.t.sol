@@ -54,12 +54,25 @@ contract bremBadgerForkTests is Test {
         vm.prank(testUsers[0]);
         bremBadgerToken.enableDeposits();
 
+        // Enable deposits
         assertEq(bremBadgerToken.depositStart(), 0);
         assertEq(bremBadgerToken.depositEnd(), 0);
         vm.prank(testOwner);
         bremBadgerToken.enableDeposits();
         assertEq(bremBadgerToken.depositStart(), block.timestamp);
         assertEq(bremBadgerToken.depositEnd(), block.timestamp + 2 weeks);
+
+        // Deposit 100 remBadger
+        vm.prank(testUsers[0]);
+        bremBadgerToken.deposit(100e18);  
+        assertEq(bremBadgerToken.balanceOf(testUsers[0]), 100e18);
+        assertEq(bremBadgerToken.getPricePerFullShare(), 1e18); 
+
+        // Cannot deposit after 2 weeks
+        vm.warp(block.timestamp + 2 weeks);
+        vm.expectRevert("No more deposits");
+        vm.prank(testUsers[0]);
+        bremBadgerToken.deposit(100e18);
     }
 
     function testWithdraw() public {
@@ -71,5 +84,39 @@ contract bremBadgerForkTests is Test {
 
         vm.prank(testUsers[0]);
         bremBadgerToken.deposit(100e18);
+
+        assertEq(bremBadgerToken.vestedAmount(testUsers[0]), 0);
+
+        // Cannot withdraw before unlock period
+        vm.expectRevert("Not yet");
+        vm.prank(testUsers[0]);
+        bremBadgerToken.withdrawAll();
+
+        vm.warp(bremBadgerToken.UNLOCK_TIMESTAMP() + 1);
+        uint256 vestingPerWeek = 100e18 / uint256(12);
+        uint256 totalVesting;
+        for (uint256 i; i < 12; i++) {
+            assertEq(bremBadgerToken.vestedAmount(testUsers[0]), totalVesting);
+            vm.warp(block.timestamp + 1 weeks);
+            totalVesting += vestingPerWeek;
+        }
+        // Total should match underlying amount
+        assertEq(bremBadgerToken.vestedAmount(testUsers[0]), 100e18);
+    }
+
+    function testPricePerShareWithDonation() public {
+        vm.prank(testOwner);
+        bremBadgerToken.enableDeposits();
+
+        vm.prank(testUsers[0]);
+        remBadgerToken.approve(address(bremBadgerToken), type(uint256).max);
+
+        vm.prank(testUsers[0]);
+        bremBadgerToken.deposit(100e18);
+
+        // Donate 10 remBadger
+        vm.prank(testUsers[1]);
+        remBadgerToken.transfer(address(bremBadgerToken), 10e18);    
+        assertEq(bremBadgerToken.getPricePerFullShare(), 1.1e18); 
     }
 }

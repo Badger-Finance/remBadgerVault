@@ -47,7 +47,7 @@ contract bremBadger is ERC20Upgradeable, ReentrancyGuard, UUPSUpgradeable {
 
     function enableDeposits() external onlyOwner {
         require(depositStart == 0);
-        
+
         depositStart = block.timestamp;
         depositEnd = block.timestamp + DEPOSIT_PERIOD_IN_SECONDS;
 
@@ -84,13 +84,13 @@ contract bremBadger is ERC20Upgradeable, ReentrancyGuard, UUPSUpgradeable {
     }
 
     function withdrawAll() external nonReentrant {
-        require(block.timestamp >= UNLOCK_TIMESTAMP, "Not yet");
+        require(block.timestamp > UNLOCK_TIMESTAMP, "Not yet");
 
-        (uint256 shares, uint256 numWeeks) = _vestedShares();
+        (uint256 shares, uint256 numWeeks) = _vestedShares(msg.sender);
 
         require(shares > 0, "zero shares");
 
-        uint256 vestedAmount = shares * getPricePerFullShare();
+        uint256 vestedAmount = _sharesToUnderlyingAmount(shares);
 
         _burn(msg.sender, shares);
 
@@ -103,35 +103,38 @@ contract bremBadger is ERC20Upgradeable, ReentrancyGuard, UUPSUpgradeable {
         // TODO: emit event
     }
 
-    function _vestedShares() private view returns (uint256, uint256) {
-        uint256 shares = balanceOf(msg.sender);
+    function _vestedShares(address _depositor) private view returns (uint256, uint256) {
+        uint256 shares = balanceOf(_depositor);
 
         if (shares == 0) return (0, 0);
 
-        uint256 remainingWeeks = VESTING_WEEKS - numVestings[msg.sender];
+        uint256 remainingWeeks = VESTING_WEEKS - numVestings[_depositor];
 
         if (remainingWeeks == 0) return (0, 0);
         if (remainingWeeks == 1) return (shares, 1);
 
-        shares = shares / remainingWeeks;
-        
+        uint256 sharesPerWeek = shares / remainingWeeks;
         uint256 numWeeks = (block.timestamp - UNLOCK_TIMESTAMP) / ONE_WEEK_IN_SECONDS;
+        
+        if (numWeeks == 0) return (0, 0);
 
-        if (numWeeks > remainingWeeks) {
-            numWeeks = remainingWeeks;
+        if (numWeeks >= remainingWeeks) {
+            return (shares, remainingWeeks);
+        } else {
+            return (sharesPerWeek * numWeeks, numWeeks);
         }
-
-        shares = numWeeks > 0 ? shares * numWeeks : shares;
-
-        return (shares, numWeeks);
     }
 
-    function vestedAmount() public view returns (uint256) {
-        if (block.timestamp < UNLOCK_TIMESTAMP) return 0;
+    function _sharesToUnderlyingAmount(uint256 _shares) private view returns (uint256) {
+        return _shares * getPricePerFullShare() / 1e18;
+    }
 
-        (uint256 shares, ) = _vestedShares();
+    function vestedAmount(address _depositor) public view returns (uint256) {
+        if (block.timestamp <= UNLOCK_TIMESTAMP) return 0;
 
-        return shares * getPricePerFullShare();
+        (uint256 shares, ) = _vestedShares(_depositor);
+
+        return _sharesToUnderlyingAmount(shares);
     }
 
     function getPricePerFullShare() public view returns (uint256) {

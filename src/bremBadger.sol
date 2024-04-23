@@ -99,26 +99,30 @@ contract bremBadger is ERC20Upgradeable, ReentrancyGuard, UUPSUpgradeable {
         }
 
         REM_BADGER_TOKEN.safeTransfer(msg.sender, vestedAmount);
-
-        // TODO: emit event
     }
 
     function _vestedShares(address _depositor) private view returns (uint256, uint256) {
         uint256 shares = balanceOf(_depositor);
 
+        // No shares, 100% vested
         if (shares == 0) return (0, 0);
 
         uint256 remainingWeeks = VESTING_WEEKS - numVestings[_depositor];
 
+        // 0 remaining weeks, 100% vested
         if (remainingWeeks == 0) return (0, 0);
+
+        // Return all shares in the final week to prevent residuals from rounding
         if (remainingWeeks == 1) return (shares, 1);
 
         uint256 sharesPerWeek = shares / remainingWeeks;
         uint256 numWeeks = (block.timestamp - UNLOCK_TIMESTAMP) / ONE_WEEK_IN_SECONDS;
         
+        // Between UNLOCK_TIMESTAMP and end of week 1, return 0
         if (numWeeks == 0) return (0, 0);
 
         if (numWeeks >= remainingWeeks) {
+            // Clamp to remaining week if someone wants to withdraw after 12 weeks
             return (shares, remainingWeeks);
         } else {
             return (sharesPerWeek * numWeeks, numWeeks);

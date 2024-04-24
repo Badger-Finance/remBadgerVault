@@ -124,6 +124,7 @@ contract bremBadgerForkTests is Test {
 
         uint256 depositAmount = 100e18;
         uint256 vestingPerWeek = depositAmount / 12;
+        uint256 residualAmount = depositAmount % 12;
 
         vm.prank(testUsers[0]);
         bremBadgerToken.deposit(depositAmount);
@@ -134,12 +135,62 @@ contract bremBadgerForkTests is Test {
         assertEq(bremBadgerToken.vestedAmount(testUsers[0]), vestingPerWeek);
 
         uint256 balBefore = remBadgerToken.balanceOf(testUsers[0]);
+        uint256 initBalance = balBefore;
         vm.prank(testUsers[0]);
         bremBadgerToken.withdrawAll();   
 
         assertEq(remBadgerToken.balanceOf(testUsers[0]) - balBefore, vestingPerWeek);
         assertEq(bremBadgerToken.numVestings(testUsers[0]), 1);
         assertEq(bremBadgerToken.vestedAmount(testUsers[0]), 0);
+
+        vm.warp(block.timestamp + 2 weeks - 1);
+        assertEq(bremBadgerToken.vestedAmount(testUsers[0]), vestingPerWeek);
+        vm.warp(block.timestamp + 1);
+        assertEq(bremBadgerToken.vestedAmount(testUsers[0]), vestingPerWeek * 2);
+
+        balBefore = remBadgerToken.balanceOf(testUsers[0]);
+        vm.prank(testUsers[0]);
+        bremBadgerToken.withdrawAll();
+
+        assertEq(remBadgerToken.balanceOf(testUsers[0]) - balBefore, vestingPerWeek * 2);
+        assertEq(bremBadgerToken.numVestings(testUsers[0]), 3);
+        assertEq(bremBadgerToken.vestedAmount(testUsers[0]), 0);
+
+        vm.warp(block.timestamp + 6 weeks - 1);
+        assertEq(bremBadgerToken.vestedAmount(testUsers[0]), vestingPerWeek * 5);
+        vm.warp(block.timestamp + 1);
+        assertEq(bremBadgerToken.vestedAmount(testUsers[0]), vestingPerWeek * 6);
+
+        balBefore = remBadgerToken.balanceOf(testUsers[0]);
+        vm.prank(testUsers[0]);
+        bremBadgerToken.withdrawAll();
+
+        assertEq(remBadgerToken.balanceOf(testUsers[0]) - balBefore, vestingPerWeek * 6);
+        assertEq(bremBadgerToken.numVestings(testUsers[0]), 9);
+        assertEq(bremBadgerToken.vestedAmount(testUsers[0]), 0);
+
+        vm.warp(block.timestamp + 3 weeks - 1);
+        assertEq(bremBadgerToken.vestedAmount(testUsers[0]), vestingPerWeek * 2);
+        // Residual amount added to final week
+        vm.warp(block.timestamp + 1);
+        assertEq(bremBadgerToken.vestedAmount(testUsers[0]), vestingPerWeek * 3 + residualAmount);
+        // Vesting amount doesn't change after final week
+        vm.warp(block.timestamp + 1);
+        assertEq(bremBadgerToken.vestedAmount(testUsers[0]), vestingPerWeek * 3 + residualAmount);
+
+        vm.warp(block.timestamp + 100);
+        balBefore = remBadgerToken.balanceOf(testUsers[0]);
+        vm.prank(testUsers[0]);
+        bremBadgerToken.withdrawAll();
+
+        assertEq(remBadgerToken.balanceOf(testUsers[0]) - balBefore, vestingPerWeek * 3 + residualAmount);
+        assertEq(remBadgerToken.balanceOf(testUsers[0]) - initBalance, depositAmount);
+        assertEq(bremBadgerToken.numVestings(testUsers[0]), 12);
+        assertEq(bremBadgerToken.vestedAmount(testUsers[0]), 0);
+
+        vm.expectRevert("zero shares");
+        vm.prank(testUsers[0]);
+        bremBadgerToken.withdrawAll();
     }
 
     function testPricePerShareWithDonation() public {

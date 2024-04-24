@@ -24,6 +24,7 @@ contract bremBadger is ERC20Upgradeable, ReentrancyGuard, UUPSUpgradeable {
     uint256 public depositStart;
     uint256 public depositEnd;
     mapping(address => uint256) public numVestings;
+    mapping(address => uint256) public sharesPerWeek;
 
     event DepositsEnabled(uint256 start, uint256 end);
     event DepositsDisabled();
@@ -81,6 +82,8 @@ contract bremBadger is ERC20Upgradeable, ReentrancyGuard, UUPSUpgradeable {
         }
 
         _mint(msg.sender, sharesToMint);
+
+        sharesPerWeek[msg.sender] = balanceOf(msg.sender) / VESTING_WEEKS;
     }
 
     function withdrawAll() external nonReentrant {
@@ -116,11 +119,13 @@ contract bremBadger is ERC20Upgradeable, ReentrancyGuard, UUPSUpgradeable {
         // Return all shares in the final week to prevent residuals from rounding
         if (remainingWeeks == 1) return (shares, 1);
 
-        uint256 sharesPerWeek = shares / remainingWeeks;
+        uint256 sharesPerWeek = sharesPerWeek[_depositor];
         uint256 numWeeks = (block.timestamp - UNLOCK_TIMESTAMP) / ONE_WEEK_IN_SECONDS;
         
         // Return 0 if the vested weeks have already been claimed
         if (numWeeks <= vestedWeeks) return (0, 0);
+
+        numWeeks -= vestedWeeks;
 
         if (numWeeks >= remainingWeeks) {
             // Clamp to remaining week if someone wants to withdraw after 12 weeks

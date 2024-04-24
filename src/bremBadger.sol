@@ -107,7 +107,8 @@ contract bremBadger is ERC20Upgradeable, ReentrancyGuard, UUPSUpgradeable {
         // No shares, 100% vested
         if (shares == 0) return (0, 0);
 
-        uint256 remainingWeeks = VESTING_WEEKS - numVestings[_depositor];
+        uint256 vestedWeeks = numVestings[_depositor];
+        uint256 remainingWeeks = VESTING_WEEKS - vestedWeeks;
 
         // 0 remaining weeks, 100% vested
         if (remainingWeeks == 0) return (0, 0);
@@ -118,8 +119,8 @@ contract bremBadger is ERC20Upgradeable, ReentrancyGuard, UUPSUpgradeable {
         uint256 sharesPerWeek = shares / remainingWeeks;
         uint256 numWeeks = (block.timestamp - UNLOCK_TIMESTAMP) / ONE_WEEK_IN_SECONDS;
         
-        // Between UNLOCK_TIMESTAMP and end of week 1, return 0
-        if (numWeeks == 0) return (0, 0);
+        // Return 0 if the vested weeks have already been claimed
+        if (numWeeks <= vestedWeeks) return (0, 0);
 
         if (numWeeks >= remainingWeeks) {
             // Clamp to remaining week if someone wants to withdraw after 12 weeks

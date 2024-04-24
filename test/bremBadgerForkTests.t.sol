@@ -92,7 +92,7 @@ contract bremBadgerForkTests is Test {
         vm.prank(testUsers[0]);
         bremBadgerToken.withdrawAll();
 
-        vm.warp(bremBadgerToken.UNLOCK_TIMESTAMP() + 1);
+        vm.warp(bremBadgerToken.UNLOCK_TIMESTAMP());
         uint256 vestingPerWeek = 100e18 / uint256(12);
         uint256 totalVesting;
         for (uint256 i; i < 12; i++) {
@@ -102,6 +102,44 @@ contract bremBadgerForkTests is Test {
         }
         // Total should match underlying amount
         assertEq(bremBadgerToken.vestedAmount(testUsers[0]), 100e18);
+
+        // Cannot withdraw unless user has deposits
+        vm.expectRevert("zero shares");
+        vm.prank(testUsers[1]);
+        bremBadgerToken.withdrawAll();
+
+        uint256 balBefore = remBadgerToken.balanceOf(testUsers[0]);
+        vm.prank(testUsers[0]);
+        bremBadgerToken.withdrawAll();
+        uint256 balAfter = remBadgerToken.balanceOf(testUsers[0]);
+        assertEq(balAfter - balBefore, 100e18);
+    }
+
+    function testWithdrawPartially() public {
+        vm.prank(testOwner);
+        bremBadgerToken.enableDeposits();
+
+        vm.prank(testUsers[0]);
+        remBadgerToken.approve(address(bremBadgerToken), type(uint256).max);
+
+        uint256 depositAmount = 100e18;
+        uint256 vestingPerWeek = depositAmount / 12;
+
+        vm.prank(testUsers[0]);
+        bremBadgerToken.deposit(depositAmount);
+
+        vm.warp(bremBadgerToken.UNLOCK_TIMESTAMP() + 1 weeks - 1);
+        assertEq(bremBadgerToken.vestedAmount(testUsers[0]), 0);
+        vm.warp(block.timestamp + 1);
+        assertEq(bremBadgerToken.vestedAmount(testUsers[0]), vestingPerWeek);
+
+        uint256 balBefore = remBadgerToken.balanceOf(testUsers[0]);
+        vm.prank(testUsers[0]);
+        bremBadgerToken.withdrawAll();   
+
+        assertEq(remBadgerToken.balanceOf(testUsers[0]) - balBefore, vestingPerWeek);
+        assertEq(bremBadgerToken.numVestings(testUsers[0]), 1);
+        assertEq(bremBadgerToken.vestedAmount(testUsers[0]), 0);
     }
 
     function testPricePerShareWithDonation() public {

@@ -11,7 +11,7 @@ contract bremBadger is ERC20Upgradeable, ReentrancyGuard, UUPSUpgradeable {
     using SafeERC20 for IERC20;
 
     // The start of the program is set retroactively to Feb 18, 2024. 
-    // This mean that the unlock must occur 9 months after this, on Nov 18, 2024. 
+    // This means that the unlock must occur 9 months after this, on Nov 18, 2024. 
     // The timestamp for this is: 1731888000
     uint256 public constant UNLOCK_TIMESTAMP = 1731888000;
     uint256 public constant VESTING_WEEKS = 12;
@@ -25,9 +25,11 @@ contract bremBadger is ERC20Upgradeable, ReentrancyGuard, UUPSUpgradeable {
     uint256 public depositEnd;
     mapping(address => uint256) public numVestings;
     mapping(address => uint256) public sharesPerWeek;
+    bool public terminated;
 
     event DepositsEnabled(uint256 start, uint256 end);
     event DepositsDisabled();
+    event Terminated();
 
     modifier onlyOwner() {
         require(msg.sender == OWNER, "Only owner");
@@ -63,8 +65,20 @@ contract bremBadger is ERC20Upgradeable, ReentrancyGuard, UUPSUpgradeable {
         emit DepositsDisabled();
     }
 
+    /// @notice Governance is allowed to terminate the program early if the underlying
+    /// BADGER token appreciate significantly in price. Doing so will unlock 100%
+    /// of the remBadger tokens immediately.
+    function terminate() external onlyOwner {
+        terminated = true;
+
+        emit Terminated();
+    }
+
     function deposit(uint256 _amount) external nonReentrant {
-        require(block.timestamp >= depositStart && block.timestamp < depositEnd, "No more deposits");
+        require(
+            !terminated && block.timestamp >= depositStart && block.timestamp < depositEnd, 
+            "No more deposits"
+        );
         require(_amount > 0, "zero amount");
 
         uint256 balBefore = REM_BADGER_TOKEN.balanceOf(address(this));
@@ -87,19 +101,25 @@ contract bremBadger is ERC20Upgradeable, ReentrancyGuard, UUPSUpgradeable {
     }
 
     function withdrawAll() external nonReentrant {
-        require(block.timestamp > UNLOCK_TIMESTAMP, "Not yet");
+        uint256 shares;
+        if (terminated) {
+            shares = balanceOf(msg.sender);
+        } else {
+            require(block.timestamp > UNLOCK_TIMESTAMP, "Not yet");
 
-        (uint256 shares, uint256 numWeeks) = _vestedShares(msg.sender);
+            uint256 numWeeks;
+            (shares, numWeeks) = _vestedShares(msg.sender);
 
+            if (numWeeks > 0) {
+                numVestings[msg.sender] += numWeeks;
+            }
+        }
+        
         require(shares > 0, "zero shares");
 
         uint256 vestedAmount = _sharesToUnderlyingAmount(shares);
 
         _burn(msg.sender, shares);
-
-        if (numWeeks > 0) {
-            numVestings[msg.sender] += numWeeks;
-        }
 
         REM_BADGER_TOKEN.safeTransfer(msg.sender, vestedAmount);
     }
@@ -140,6 +160,8 @@ contract bremBadger is ERC20Upgradeable, ReentrancyGuard, UUPSUpgradeable {
     }
 
     function vestedAmount(address _depositor) public view returns (uint256) {
+        if (terminated) return balanceOf(_depositor);
+
         if (block.timestamp <= UNLOCK_TIMESTAMP) return 0;
 
         (uint256 shares, ) = _vestedShares(_depositor);

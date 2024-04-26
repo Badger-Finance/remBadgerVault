@@ -193,6 +193,69 @@ contract bremBadgerForkTests is Test {
         bremBadgerToken.withdrawAll();
     }
 
+    function testMultipleUsers() public {
+        vm.prank(testOwner);
+        bremBadgerToken.enableDeposits();
+
+        vm.prank(testUsers[0]);
+        remBadgerToken.approve(address(bremBadgerToken), type(uint256).max);
+
+        vm.prank(testUsers[1]);
+        remBadgerToken.approve(address(bremBadgerToken), type(uint256).max);
+
+        uint256 depositAmount = 467e18;
+        uint256 vestingPerWeek1 = depositAmount / 12;
+        uint256 vestingPerWeek2 = depositAmount * 2 / 12;
+        uint256 residualAmount = depositAmount % 12;
+
+        vm.prank(testUsers[0]);
+        bremBadgerToken.deposit(depositAmount);
+
+        vm.prank(testUsers[1]);
+        bremBadgerToken.deposit(depositAmount * 2);
+
+        uint256 initBal1 = remBadgerToken.balanceOf(testUsers[0]);
+        uint256 initBal2 = remBadgerToken.balanceOf(testUsers[1]);
+
+        vm.warp(bremBadgerToken.UNLOCK_TIMESTAMP() + 5 weeks);
+
+        assertEq(bremBadgerToken.vestedAmount(testUsers[0]), vestingPerWeek1 * 5);
+        assertEq(bremBadgerToken.vestedAmount(testUsers[1]), vestingPerWeek2 * 5);
+
+        uint256 balBefore = remBadgerToken.balanceOf(testUsers[0]);
+        vm.prank(testUsers[0]);
+        bremBadgerToken.withdrawAll();
+
+        assertEq(remBadgerToken.balanceOf(testUsers[0]) - balBefore, vestingPerWeek1 * 5);
+
+        balBefore = remBadgerToken.balanceOf(testUsers[1]);
+        vm.prank(testUsers[1]);
+        bremBadgerToken.withdrawAll();
+
+        assertEq(remBadgerToken.balanceOf(testUsers[1]) - balBefore, vestingPerWeek2 * 5);
+
+        assertEq(bremBadgerToken.vestedAmount(testUsers[0]), 0);
+        assertEq(bremBadgerToken.vestedAmount(testUsers[1]), 0);
+
+        vm.warp(block.timestamp + 10 weeks);
+
+        assertEq(bremBadgerToken.vestedAmount(testUsers[0]), depositAmount - vestingPerWeek1 * 5);
+        assertEq(bremBadgerToken.vestedAmount(testUsers[1]), depositAmount * 2 - vestingPerWeek2 * 5);
+
+        vm.prank(testUsers[0]);
+        bremBadgerToken.withdrawAll();
+
+        assertEq(remBadgerToken.balanceOf(testUsers[0]) - initBal1, depositAmount);
+
+        vm.prank(testUsers[1]);
+        bremBadgerToken.withdrawAll();     
+
+        assertEq(remBadgerToken.balanceOf(testUsers[1]) - initBal2, depositAmount * 2);
+
+        assertEq(bremBadgerToken.vestedAmount(testUsers[0]), 0);
+        assertEq(bremBadgerToken.vestedAmount(testUsers[1]), 0); 
+    }
+
     function testPricePerShareWithDonation() public {
         vm.prank(testOwner);
         bremBadgerToken.enableDeposits();
@@ -207,5 +270,124 @@ contract bremBadgerForkTests is Test {
         vm.prank(testUsers[1]);
         remBadgerToken.transfer(address(bremBadgerToken), 10e18);    
         assertEq(bremBadgerToken.getPricePerFullShare(), 1.1e18); 
+    }
+
+    function testWithdrawAfterDonation() public {
+        vm.prank(testOwner);
+        bremBadgerToken.enableDeposits();
+
+        vm.prank(testUsers[0]);
+        remBadgerToken.approve(address(bremBadgerToken), type(uint256).max);
+
+        vm.prank(testUsers[1]);
+        remBadgerToken.approve(address(bremBadgerToken), type(uint256).max);
+
+        uint256 vestingPerWeek1 = 100e18 / uint256(12);
+        uint256 vestingPerWeek2 = 200e18 / uint256(12);
+
+        vm.prank(testUsers[0]);
+        bremBadgerToken.deposit(100e18);
+
+        vm.prank(testUsers[1]);
+        bremBadgerToken.deposit(200e18);
+
+        uint256 initBal1 = remBadgerToken.balanceOf(testUsers[0]);
+        uint256 initBal2 = remBadgerToken.balanceOf(testUsers[1]);
+
+        vm.prank(testUsers[2]);
+        remBadgerToken.transfer(address(bremBadgerToken), 30e18);    
+        assertEq(bremBadgerToken.getPricePerFullShare(), 1.1e18); 
+
+        vm.warp(bremBadgerToken.UNLOCK_TIMESTAMP() + 1 weeks);
+        assertEq(bremBadgerToken.vestedAmount(testUsers[0]), vestingPerWeek1 * 1.1e18 / 1e18);
+        assertEq(bremBadgerToken.vestedAmount(testUsers[1]), vestingPerWeek2 * 1.1e18 / 1e18);
+
+        vm.warp(block.timestamp + 20 weeks);
+
+        vm.prank(testUsers[0]);
+        bremBadgerToken.withdrawAll();
+
+        vm.prank(testUsers[1]);
+        bremBadgerToken.withdrawAll();
+
+        assertEq(remBadgerToken.balanceOf(testUsers[0]) - initBal1, 110e18);
+        assertEq(remBadgerToken.balanceOf(testUsers[1]) - initBal2, 220e18);
+    }
+
+    function testEarlyTerminationBeforeUnlock() public {
+        vm.prank(testOwner);
+        bremBadgerToken.enableDeposits();
+
+        vm.prank(testUsers[0]);
+        remBadgerToken.approve(address(bremBadgerToken), type(uint256).max);
+
+        uint256 depositAmount = 100e18;
+
+        vm.prank(testUsers[0]);
+        bremBadgerToken.deposit(depositAmount);
+
+        assertEq(bremBadgerToken.vestedAmount(testUsers[0]), 0);
+
+        vm.expectRevert("Only owner");
+        vm.prank(testUsers[2]);
+        bremBadgerToken.terminate();
+
+        vm.prank(testOwner);
+        bremBadgerToken.terminate();
+
+        vm.expectRevert("No more deposits");
+        vm.prank(testUsers[0]);
+        bremBadgerToken.deposit(depositAmount);
+
+        assertEq(bremBadgerToken.vestedAmount(testUsers[0]), depositAmount);
+
+        uint256 balBefore = remBadgerToken.balanceOf(testUsers[0]);
+        vm.prank(testUsers[0]);
+        bremBadgerToken.withdrawAll();
+        uint256 balAfter = remBadgerToken.balanceOf(testUsers[0]);
+
+        assertEq(balAfter - balBefore, depositAmount);
+        assertEq(bremBadgerToken.vestedAmount(testUsers[0]), 0);
+    }
+
+    function testEarlyTerminationAfterUnlock() public {
+        vm.prank(testOwner);
+        bremBadgerToken.enableDeposits();
+
+        vm.prank(testUsers[0]);
+        remBadgerToken.approve(address(bremBadgerToken), type(uint256).max);
+
+        uint256 depositAmount = 100e18;
+        uint256 vestingPerWeek = depositAmount / 12;
+        uint256 residualAmount = depositAmount % 12;
+
+        vm.prank(testUsers[0]);
+        bremBadgerToken.deposit(depositAmount);
+
+        uint256 initBal = remBadgerToken.balanceOf(testUsers[0]);
+
+        vm.warp(bremBadgerToken.UNLOCK_TIMESTAMP() + 3 weeks);
+
+        assertEq(bremBadgerToken.vestedAmount(testUsers[0]), vestingPerWeek * 3);
+
+        uint256 balBefore = remBadgerToken.balanceOf(testUsers[0]);
+        vm.prank(testUsers[0]);
+        bremBadgerToken.withdrawAll();
+
+        assertEq(remBadgerToken.balanceOf(testUsers[0]) - balBefore, vestingPerWeek * 3);
+
+        vm.expectRevert("Only owner");
+        vm.prank(testUsers[2]);
+        bremBadgerToken.terminate();
+
+        vm.prank(testOwner);
+        bremBadgerToken.terminate();
+
+        assertEq(bremBadgerToken.vestedAmount(testUsers[0]), depositAmount - vestingPerWeek * 3);
+
+        vm.prank(testUsers[0]);
+        bremBadgerToken.withdrawAll();
+
+        assertEq(remBadgerToken.balanceOf(testUsers[0]) - initBal, depositAmount);
     }
 }

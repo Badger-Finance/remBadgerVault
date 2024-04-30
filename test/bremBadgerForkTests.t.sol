@@ -25,8 +25,9 @@ contract bremBadgerForkTests is Test {
         vm.prank(testOwner);
         bremBadgerToken.initialize();
 
-        testUsers = new address[](1);
+        testUsers = new address[](2);
         testUsers[0] = 0x564B1a055D9caaaFF7435dcE6B5F6E522b27dE7d;
+        testUsers[1] = 0xeD5e679d74273Ca5C319DAc2229f2e87E20903Ea;
     }
 
     function testDeposit() public {
@@ -41,7 +42,7 @@ contract bremBadgerForkTests is Test {
         vm.prank(testUsers[0]);
         bremBadgerToken.deposit(remBal);
 
-        assertEq(bremBadgerToken.balanceOf(testUsers[0]), remBal);
+        assertEq(bremBadgerToken.totalDeposited(testUsers[0]), remBal);
         assertEq(remBadgerToken.balanceOf(testUsers[0]), 0);
     }
 
@@ -72,7 +73,7 @@ contract bremBadgerForkTests is Test {
         uint256 balAfter = remBadgerToken.balanceOf(testUsers[0]);
 
         assertEq(balAfter - balBefore, remBalPerWeek * 5);
-        assertEq(bremBadgerToken.numVestings(testUsers[0]), 5);
+        assertEq(bremBadgerToken.totalClaimed(testUsers[0]), remBalPerWeek * 5);
 
         vm.warp(bremBadgerToken.UNLOCK_TIMESTAMP() + 16 weeks);
 
@@ -86,5 +87,29 @@ contract bremBadgerForkTests is Test {
         // Final amount equals to starting amount
         assertEq(balAfter - balBefore, remBalPerWeek * 7 + remBalRemainder);
         assertEq(remBadgerToken.balanceOf(testUsers[0]), remBal);        
+    }
+
+    function testWithdrawMultipleDepositors() public {
+        vm.prank(testUsers[0]);
+        remBadgerToken.approve(address(bremBadgerToken), type(uint256).max);
+        vm.prank(testUsers[1]);
+        remBadgerToken.approve(address(bremBadgerToken), type(uint256).max);
+
+        vm.prank(testOwner);
+        bremBadgerToken.enableDeposits();
+
+        uint256 remBal1 = remBadgerToken.balanceOf(testUsers[0]);
+        uint256 remBal2 = remBadgerToken.balanceOf(testUsers[1]);
+
+        vm.prank(testUsers[0]);
+        bremBadgerToken.deposit(remBal1);
+        vm.prank(testUsers[1]);
+        bremBadgerToken.deposit(remBal2);
+
+        vm.warp(bremBadgerToken.UNLOCK_TIMESTAMP() + 1 weeks);
+        vm.warp(bremBadgerToken.UNLOCK_TIMESTAMP() + 2 weeks);
+        vm.warp(bremBadgerToken.UNLOCK_TIMESTAMP() + 3 weeks);
+        vm.warp(bremBadgerToken.UNLOCK_TIMESTAMP() + 4 weeks);
+        vm.warp(bremBadgerToken.UNLOCK_TIMESTAMP() + 5 weeks);
     }
 }

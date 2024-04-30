@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
 
-import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-contract bremBadger is ERC20Upgradeable, ReentrancyGuard, UUPSUpgradeable {
+contract bremBadger is ReentrancyGuard, UUPSUpgradeable {
     using SafeERC20 for IERC20;
 
     // The start of the program is set retroactively to Feb 18, 2024. 
@@ -23,8 +22,8 @@ contract bremBadger is ERC20Upgradeable, ReentrancyGuard, UUPSUpgradeable {
 
     uint256 public depositStart;
     uint256 public depositEnd;
-    mapping(address => uint256) public numVestings;
-    mapping(address => uint256) public sharesPerWeek;
+    mapping(address => uint256) public totalDeposited;
+    mapping(address => uint256) public totalClaimed;
     bool public terminated;
 
     event DepositsEnabled(uint256 start, uint256 end);
@@ -44,7 +43,6 @@ contract bremBadger is ERC20Upgradeable, ReentrancyGuard, UUPSUpgradeable {
     }
 
     function initialize() external onlyOwner initializer {
-        ERC20Upgradeable.__ERC20_init("bremBADGER", "bremBADGER");
         UUPSUpgradeable.__UUPSUpgradeable_init();
     }
 
@@ -85,95 +83,53 @@ contract bremBadger is ERC20Upgradeable, ReentrancyGuard, UUPSUpgradeable {
         REM_BADGER_TOKEN.safeTransferFrom(msg.sender, address(this), _amount);
         uint256 balAfter = REM_BADGER_TOKEN.balanceOf(address(this));
 
-        _amount = balAfter - balBefore; // Additional check for deflationary tokens
-
-        uint256 totalShares = totalSupply();
-        uint256 sharesToMint;
-        if (totalShares == 0) {
-            sharesToMint = _amount;
-        } else {
-            sharesToMint = _amount * totalShares / balBefore;
-        }
-
-        _mint(msg.sender, sharesToMint);
-
-        sharesPerWeek[msg.sender] = balanceOf(msg.sender) / VESTING_WEEKS;
+        totalDeposited[msg.sender] += balAfter - balBefore;
     }
 
-    function withdrawAll() external nonReentrant {
-        uint256 shares;
-        if (terminated) {
-            shares = balanceOf(msg.sender);
-        } else {
-            require(block.timestamp > UNLOCK_TIMESTAMP, "Not yet");
+    function withdrawAll() external nonReentrant {        
+        require(terminated || block.timestamp > UNLOCK_TIMESTAMP, "Not yet");
 
-            uint256 numWeeks;
-            (shares, numWeeks) = _vestedShares(msg.sender);
+        uint256 vestedAmount = _vestedAmount(msg.sender);
 
-            if (numWeeks > 0) {
-                numVestings[msg.sender] += numWeeks;
-            }
-        }
-        
-        require(shares > 0, "zero shares");
+        require(vestedAmount > 0, "zero amount");
 
-        uint256 vestedAmount = _sharesToUnderlyingAmount(shares);
-
-        _burn(msg.sender, shares);
+        totalClaimed[msg.sender] += vestedAmount;
 
         REM_BADGER_TOKEN.safeTransfer(msg.sender, vestedAmount);
     }
 
-    function _vestedShares(address _depositor) private view returns (uint256, uint256) {
-        uint256 shares = balanceOf(_depositor);
+    function _vestedAmount(address _depositor) private view returns (uint256) {
+        uint256 depositAmount = totalDeposited[_depositor];
+        uint256 claimedAmount = totalClaimed[_depositor];
+        uint256 maxClaim = depositAmount - claimedAmount;
 
-        // No shares, 100% vested
-        if (shares == 0) return (0, 0);
+        if (terminated) {
+            return maxClaim;
+        }
 
-        uint256 vestedWeeks = numVestings[_depositor];
-        uint256 remainingWeeks = VESTING_WEEKS - vestedWeeks;
-
-        // 0 remaining weeks, 100% vested
-        if (remainingWeeks == 0) return (0, 0);
-
-        // Return all shares in the final week to prevent residuals from rounding
-        if (remainingWeeks == 1) return (shares, 1);
-
-        uint256 sharesPerWeek = sharesPerWeek[_depositor];
+        uint256 sharesPerWeek = depositAmount / VESTING_WEEKS;
         uint256 numWeeks = (block.timestamp - UNLOCK_TIMESTAMP) / ONE_WEEK_IN_SECONDS;
-        
-        // Return 0 if the vested weeks have already been claimed
-        if (numWeeks <= vestedWeeks) return (0, 0);
 
-        numWeeks -= vestedWeeks;
-
-        if (numWeeks >= remainingWeeks) {
-            // Clamp to remaining week if someone wants to withdraw after 12 weeks
-            return (shares, remainingWeeks);
-        } else {
-            return (sharesPerWeek * numWeeks, numWeeks);
+        /// @dev return max claimable amount after the final week to prevent rounding error
+        if (numWeeks >= VESTING_WEEKS) {
+            return maxClaim;
         }
-    }
 
-    function _sharesToUnderlyingAmount(uint256 _shares) private view returns (uint256) {
-        return _shares * getPricePerFullShare() / 1e18;
-    }
+        uint256 vestingAmount = numWeeks * sharesPerWeek;
 
+        if (vestingAmount <= claimedAmount) {
+            return 0;
+        }
+
+        vestingAmount -= claimedAmount;
+
+        return vestingAmount > maxClaim ? maxClaim : vestingAmount;
+    }
+    
     function vestedAmount(address _depositor) public view returns (uint256) {
-        if (terminated) return balanceOf(_depositor);
+        if (!terminated && block.timestamp <= UNLOCK_TIMESTAMP) return 0;
 
-        if (block.timestamp <= UNLOCK_TIMESTAMP) return 0;
-
-        (uint256 shares, ) = _vestedShares(_depositor);
-
-        return _sharesToUnderlyingAmount(shares);
-    }
-
-    function getPricePerFullShare() public view returns (uint256) {
-        if (totalSupply() == 0) {
-            return 1e18;
-        }
-        return REM_BADGER_TOKEN.balanceOf(address(this)) * 1e18 / totalSupply();
+        return _vestedAmount(_depositor);
     }
 
     function _authorizeUpgrade(

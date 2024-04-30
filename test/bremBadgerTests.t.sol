@@ -65,8 +65,7 @@ contract bremBadgerTests is Test {
         // Deposit 100 remBadger
         vm.prank(testUsers[0]);
         bremBadgerToken.deposit(100e18);  
-        assertEq(bremBadgerToken.balanceOf(testUsers[0]), 100e18);
-        assertEq(bremBadgerToken.getPricePerFullShare(), 1e18); 
+        assertEq(bremBadgerToken.totalDeposited(testUsers[0]), 100e18);
 
         // Cannot deposit after 2 weeks
         vm.warp(block.timestamp + 2 weeks);
@@ -104,7 +103,7 @@ contract bremBadgerTests is Test {
         assertEq(bremBadgerToken.vestedAmount(testUsers[0]), 100e18);
 
         // Cannot withdraw unless user has deposits
-        vm.expectRevert("zero shares");
+        vm.expectRevert("zero amount");
         vm.prank(testUsers[1]);
         bremBadgerToken.withdrawAll();
 
@@ -140,7 +139,7 @@ contract bremBadgerTests is Test {
         bremBadgerToken.withdrawAll();   
 
         assertEq(remBadgerToken.balanceOf(testUsers[0]) - balBefore, vestingPerWeek);
-        assertEq(bremBadgerToken.numVestings(testUsers[0]), 1);
+        assertEq(bremBadgerToken.totalClaimed(testUsers[0]), vestingPerWeek);
         assertEq(bremBadgerToken.vestedAmount(testUsers[0]), 0);
 
         vm.warp(block.timestamp + 2 weeks - 1);
@@ -153,7 +152,7 @@ contract bremBadgerTests is Test {
         bremBadgerToken.withdrawAll();
 
         assertEq(remBadgerToken.balanceOf(testUsers[0]) - balBefore, vestingPerWeek * 2);
-        assertEq(bremBadgerToken.numVestings(testUsers[0]), 3);
+        assertEq(bremBadgerToken.totalClaimed(testUsers[0]), vestingPerWeek * 3);
         assertEq(bremBadgerToken.vestedAmount(testUsers[0]), 0);
 
         vm.warp(block.timestamp + 6 weeks - 1);
@@ -166,7 +165,7 @@ contract bremBadgerTests is Test {
         bremBadgerToken.withdrawAll();
 
         assertEq(remBadgerToken.balanceOf(testUsers[0]) - balBefore, vestingPerWeek * 6);
-        assertEq(bremBadgerToken.numVestings(testUsers[0]), 9);
+        assertEq(bremBadgerToken.totalClaimed(testUsers[0]), vestingPerWeek * 9);
         assertEq(bremBadgerToken.vestedAmount(testUsers[0]), 0);
 
         vm.warp(block.timestamp + 3 weeks - 1);
@@ -185,10 +184,10 @@ contract bremBadgerTests is Test {
 
         assertEq(remBadgerToken.balanceOf(testUsers[0]) - balBefore, vestingPerWeek * 3 + residualAmount);
         assertEq(remBadgerToken.balanceOf(testUsers[0]) - initBalance, depositAmount);
-        assertEq(bremBadgerToken.numVestings(testUsers[0]), 12);
+        assertEq(bremBadgerToken.totalClaimed(testUsers[0]), 12 * vestingPerWeek + residualAmount);
         assertEq(bremBadgerToken.vestedAmount(testUsers[0]), 0);
 
-        vm.expectRevert("zero shares");
+        vm.expectRevert("zero amount");
         vm.prank(testUsers[0]);
         bremBadgerToken.withdrawAll();
     }
@@ -234,6 +233,9 @@ contract bremBadgerTests is Test {
 
         assertEq(remBadgerToken.balanceOf(testUsers[1]) - balBefore, vestingPerWeek2 * 5);
 
+        console.log("totalDeposited", bremBadgerToken.totalDeposited(testUsers[0]));
+        console.log("totalClaimed", bremBadgerToken.totalClaimed(testUsers[0]));
+
         assertEq(bremBadgerToken.vestedAmount(testUsers[0]), 0);
         assertEq(bremBadgerToken.vestedAmount(testUsers[1]), 0);
 
@@ -253,7 +255,7 @@ contract bremBadgerTests is Test {
         assertEq(remBadgerToken.balanceOf(testUsers[1]) - initBal2, depositAmount * 2);
 
         assertEq(bremBadgerToken.vestedAmount(testUsers[0]), 0);
-        assertEq(bremBadgerToken.vestedAmount(testUsers[1]), 0); 
+        assertEq(bremBadgerToken.vestedAmount(testUsers[1]), 0);
     }
 
     function testPricePerShareWithDonation() public {
@@ -269,7 +271,7 @@ contract bremBadgerTests is Test {
         // Donate 10 remBadger
         vm.prank(testUsers[1]);
         remBadgerToken.transfer(address(bremBadgerToken), 10e18);    
-        assertEq(bremBadgerToken.getPricePerFullShare(), 1.1e18); 
+        assertEq(bremBadgerToken.totalDeposited(testUsers[0]), 100e18); 
     }
 
     function testWithdrawAfterDonation() public {
@@ -296,11 +298,10 @@ contract bremBadgerTests is Test {
 
         vm.prank(testUsers[2]);
         remBadgerToken.transfer(address(bremBadgerToken), 30e18);    
-        assertEq(bremBadgerToken.getPricePerFullShare(), 1.1e18); 
 
         vm.warp(bremBadgerToken.UNLOCK_TIMESTAMP() + 1 weeks);
-        assertEq(bremBadgerToken.vestedAmount(testUsers[0]), vestingPerWeek1 * 1.1e18 / 1e18);
-        assertEq(bremBadgerToken.vestedAmount(testUsers[1]), vestingPerWeek2 * 1.1e18 / 1e18);
+        assertEq(bremBadgerToken.vestedAmount(testUsers[0]), vestingPerWeek1);
+        assertEq(bremBadgerToken.vestedAmount(testUsers[1]), vestingPerWeek2);
 
         vm.warp(block.timestamp + 20 weeks);
 
@@ -310,8 +311,8 @@ contract bremBadgerTests is Test {
         vm.prank(testUsers[1]);
         bremBadgerToken.withdrawAll();
 
-        assertEq(remBadgerToken.balanceOf(testUsers[0]) - initBal1, 110e18);
-        assertEq(remBadgerToken.balanceOf(testUsers[1]) - initBal2, 220e18);
+        assertEq(remBadgerToken.balanceOf(testUsers[0]) - initBal1, 100e18);
+        assertEq(remBadgerToken.balanceOf(testUsers[1]) - initBal2, 200e18);
     }
 
     function testEarlyTerminationBeforeUnlock() public {

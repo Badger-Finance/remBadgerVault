@@ -107,9 +107,29 @@ contract bremBadgerForkTests is Test {
         bremBadgerToken.deposit(remBal2);
 
         vm.warp(bremBadgerToken.UNLOCK_TIMESTAMP() + 1 weeks);
+        vm.prank(testUsers[0]);
+        bremBadgerToken.withdrawAll();
+        assertEq(remBadgerToken.balanceOf(testUsers[0]), remBal1 / 12);        
         vm.warp(bremBadgerToken.UNLOCK_TIMESTAMP() + 2 weeks);
         vm.warp(bremBadgerToken.UNLOCK_TIMESTAMP() + 3 weeks);
+        vm.prank(testUsers[1]);
+        bremBadgerToken.withdrawAll();
+        assertEq(remBadgerToken.balanceOf(testUsers[1]), remBal2 / 12 * 3);        
         vm.warp(bremBadgerToken.UNLOCK_TIMESTAMP() + 4 weeks);
         vm.warp(bremBadgerToken.UNLOCK_TIMESTAMP() + 5 weeks);
+        vm.prank(testUsers[0]);
+        bremBadgerToken.withdrawAll();
+        assertEq(remBadgerToken.balanceOf(testUsers[0]), remBal1 / 12 * 5);        
+        vm.warp(bremBadgerToken.UNLOCK_TIMESTAMP() + 12 weeks);
+        vm.prank(testUsers[1]);
+        bremBadgerToken.withdrawAll();
+        assertEq(remBadgerToken.balanceOf(testUsers[1]), remBal2 / 12 * 12 + remBal2 % 12);        
+        vm.warp(bremBadgerToken.UNLOCK_TIMESTAMP() + 13 weeks);
+        vm.prank(testUsers[0]);
+        bremBadgerToken.withdrawAll();
+        assertEq(remBadgerToken.balanceOf(testUsers[0]), remBal1 / 12 * 12 + remBal1 % 12);        
+
+        assertEq(remBadgerToken.balanceOf(testUsers[0]), remBal1);        
+        assertEq(remBadgerToken.balanceOf(testUsers[1]), remBal2);        
     }
 }

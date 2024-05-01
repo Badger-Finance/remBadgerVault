@@ -11,6 +11,7 @@ import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.s
 contract bremBadgerTests is Test {
 
     address internal testOwner;
+    address internal testAdmin;
     address[] internal testUsers;
     BadgerMock public badgerToken;
     remBadgerMock public remBadgerToken;
@@ -18,10 +19,11 @@ contract bremBadgerTests is Test {
 
     function setUp() public {
         testOwner = vm.addr(0x12345);
+        testAdmin = vm.addr(0x23456);
         badgerToken = new BadgerMock();
         remBadgerToken = new remBadgerMock(address(badgerToken));
         
-        bremBadger impl = new bremBadger(address(remBadgerToken), testOwner);
+        bremBadger impl = new bremBadger(address(remBadgerToken), testOwner, testAdmin);
         ERC1967Proxy proxy = new ERC1967Proxy(address(impl), "");
 
         bremBadgerToken = bremBadger(address(proxy));

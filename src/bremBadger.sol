@@ -18,7 +18,10 @@ contract bremBadger is ReentrancyGuard, UUPSUpgradeable {
     uint256 public constant DEPOSIT_PERIOD_IN_SECONDS = 2 weeks;
 
     IERC20 public immutable REM_BADGER_TOKEN;
+    /// @notice owner can enable/disable/terminate the vault
     address public immutable OWNER;
+    /// @notice admin can upgrade the contract implementation
+    address public immutable ADMIN;
 
     uint256 public depositStart;
     uint256 public depositEnd;
@@ -35,10 +38,19 @@ contract bremBadger is ReentrancyGuard, UUPSUpgradeable {
         _;
     }
 
-    constructor(address _remBadgerToken, address _owner) {
+    modifier onlyAdmin() {
+        require(msg.sender == ADMIN, "Only admin");
+        _;
+    }
+
+    constructor(address _remBadgerToken, address _owner, address _admin) {
         _disableInitializers();
 
+        // make sure we can upgrade again
+        require(_admin != address(0));
+
         OWNER = _owner;
+        ADMIN = _admin;
         REM_BADGER_TOKEN = IERC20(_remBadgerToken);
     }
 
@@ -83,6 +95,7 @@ contract bremBadger is ReentrancyGuard, UUPSUpgradeable {
         REM_BADGER_TOKEN.safeTransferFrom(msg.sender, address(this), _amount);
         uint256 balAfter = REM_BADGER_TOKEN.balanceOf(address(this));
 
+        /// @notice deposit period will end before UNLOCK_TIMESTAMP
         totalDeposited[msg.sender] += balAfter - balBefore;
     }
 
@@ -134,5 +147,5 @@ contract bremBadger is ReentrancyGuard, UUPSUpgradeable {
 
     function _authorizeUpgrade(
         address
-    ) internal view override onlyOwner {}
+    ) internal view override onlyAdmin {}
 }

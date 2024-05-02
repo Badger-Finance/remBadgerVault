@@ -6,6 +6,8 @@ import {BaseSetup} from "@chimera/BaseSetup.sol";
 
 import "src/bremBadger.sol";
 import "./MockERC20.sol";
+import {vm} from "@chimera/Hevm.sol";
+
 
 abstract contract Setup is BaseSetup {
 
@@ -22,5 +24,7 @@ abstract contract Setup is BaseSetup {
 
       want.mint(address(this), 1_000_000e18);
       want.approve(address(vault), type(uint256).max);
+
+      vm.warp(1714654271); // Now
     }
 }

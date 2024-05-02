@@ -34,4 +34,9 @@ abstract contract TargetFunctions is BaseTargetFunctions, Properties, BeforeAfte
 
       totalWithdrawn += want.balanceOf(address(this)) - balB4;
     }
+
+    function warpToTheEnd() public {
+      require(block.timestamp < vault.depositEnd());
+      vm.warp(vault.depositEnd());
+    }
 }

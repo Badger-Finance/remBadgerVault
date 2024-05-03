@@ -22,6 +22,8 @@ abstract contract Setup is BaseSetup {
       want = new MockERC20("remBadger", "rBADGER");
       vault = new bremBadger(address(want), address(this), address(this));
 
+      want.mint(address(vault), 1_000_000e18);
+      
       want.mint(address(this), 1_000_000e18);
       want.approve(address(vault), type(uint256).max);
 

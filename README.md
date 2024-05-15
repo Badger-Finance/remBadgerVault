@@ -1,66 +1,21 @@
-## Foundry
+## bremBadger Project
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+- scaffold repo: https://github.com/Badger-Finance/badger-vaults-sunset
+- old vault repo: https://github.com/Badger-Finance/remBadger/tree/feat/restituton2.0
+- new vault repo: https://github.com/Badger-Finance/remBadgerVault
+- description full: https://docs.google.com/document/d/14Ub20r21C7Sqt05SeMyjRX4Qr76PxpeWPLZpC91GYHw/edit
 
-Foundry consists of:
+## cliff notes:
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+UI shows state of bremBadger phases ( Deposit phase, Hold phase, Withdraw phase)
+Phases
 
-## Documentation
+**Deposit:** see remBadger balance, allow users to deposit their remBadger balance into bremBadger vault. Have ToS confirmation w/ sign off they understand (will require wallet sign). Allow users to see their balance in the bremBadger vault. Say when they will be allowed to withdraw + explain basic rules of this + link to forum/docs. There will be a countdown to when Deposits will be closed
 
-https://book.getfoundry.sh/
+**Hold Phase:** Say Deposits is closed, still show bremBadger balance and countdown to allowed withdrawal. Still show rules
 
-## Usage
+**Withdraw Phase:** Allow withdraws of their positions + Above. 
 
-### Build
-
-```shell
-$ forge build
-```
-
-### Test
-
-```shell
-$ forge test
-```
-
-### Format
-
-```shell
-$ forge fmt
-```
-
-### Gas Snapshots
-
-```shell
-$ forge snapshot
-```
-
-### Anvil
-
-```shell
-$ anvil
-```
-
-### Deploy
-
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+## Other Notes:
+- have link to intercom support
+- website copy/wording very important

@@ -61,8 +61,12 @@ contract bremBadgerTests is Test {
         assertEq(bremBadgerToken.depositEnd(), 0);
         vm.prank(testOwner);
         bremBadgerToken.enableDeposits();
+        // Can be called more than once
+        vm.prank(testOwner);
+        bremBadgerToken.enableDeposits();
         assertEq(bremBadgerToken.depositStart(), block.timestamp);
         assertEq(bremBadgerToken.depositEnd(), block.timestamp + 2 weeks);
+
 
         // Deposit 100 remBadger
         vm.prank(testUsers[0]);

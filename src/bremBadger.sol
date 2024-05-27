@@ -59,8 +59,6 @@ contract bremBadger is ReentrancyGuard, UUPSUpgradeable {
     }
 
     function enableDeposits() external onlyOwner {
-        require(depositStart == 0);
-
         depositStart = block.timestamp;
         depositEnd = block.timestamp + DEPOSIT_PERIOD_IN_SECONDS;
 

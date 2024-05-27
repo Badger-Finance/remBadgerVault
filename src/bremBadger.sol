@@ -59,10 +59,8 @@ contract bremBadger is ReentrancyGuard, UUPSUpgradeable {
     }
 
     function enableDeposits() external onlyOwner {
-        require(depositStart == 0);
-
         depositStart = block.timestamp;
-        depositEnd = block.timestamp + DEPOSIT_PERIOD_IN_SECONDS;
+        depositEnd = block.timestamp + DEPOSIT_PERIOD_IN_SECONDS; /// @audit I think this needs to be changeable since it's starting in a odd way
 
         require(depositEnd < UNLOCK_TIMESTAMP);
 

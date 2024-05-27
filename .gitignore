@@ -14,3 +14,8 @@ docs/
 .env
 
 temp/
+
+# Recon
+/crytic-export
+/medusa
+/echidna
